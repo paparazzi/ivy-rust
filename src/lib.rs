@@ -8,15 +8,25 @@ use std::error::Error;
 use std::mem;
 
 
-/// Dummy struct
+/// Minimal struct representation compatible with Ivy library
 #[repr(C,packed)]
 pub struct IvyClientPtr {
 	next: *mut IvyClientPtr,
 }
 
+/// Minimal struct representation compatible with Ivy library
 #[repr(C,packed)]
 pub struct MsgRcvPtr {
 	next: *mut MsgRcvPtr,
+}
+
+/// Intended for future use
+pub enum IvyApplicationEvent { 
+	IvyApplicationConnected,
+	IvyApplicationDisconnected,
+	IvyApplicationCongestion,
+	IvyApplicationDecongestion,
+	IvyApplicationFifoFull,
 }
 
 #[link(name = "ivy")]
@@ -33,7 +43,12 @@ extern {
 }
 
 
-/// Initialize Ivy bus 
+/// Initialize Ivy bus
+/// 
+/// `app_name` is the name of the application as it will
+/// show up on the Ivy bus, `ready_msg` is printed on the bus
+/// once your application is ready to listen,
+/// 
 pub fn ivy_init(app_name: String, ready_msg: String) {
 	let app_name = CString::new(app_name).unwrap();
 	let ready_msg = CString::new(ready_msg).unwrap();
@@ -44,6 +59,10 @@ pub fn ivy_init(app_name: String, ready_msg: String) {
 
 
 /// Start Ivy bus
+///
+/// Specify the bus addres as `X.X.X.X:YYY`,
+/// the default is `127.255.255.255`, port `2010`
+///
 pub fn ivy_start(bus_addr: Option<String>) {
 	match bus_addr {
 		Some(addr) => {
@@ -80,6 +99,8 @@ pub fn ivy_main_loop() -> Result<(), Box<Error>> {
 
 
 /// Send a message over Ivy bus
+///
+/// Note that non-ascii messages are not handled, and might cause `panic!`
 pub fn ivy_send_msg(msg: String) {
 	let msg = CString::new(msg).unwrap();
 	unsafe {
@@ -90,6 +111,11 @@ pub fn ivy_send_msg(msg: String) {
 
 
 /// Bind a callback for a particular message
+///
+/// `regexpr` defines which message should be bound, for 
+/// example "\^(\\S*) DL_SETTING (\\S*) (\\S*) (\\S*)" will
+/// and `cb` is a function callback in form of `Fn(Vec<String>)`
+/// 
 pub fn ivy_bind_msg<F>(cb: F, regexpr: String) -> MsgRcvPtr
     where F: Fn(Vec<String>)
 {

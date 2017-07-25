@@ -5,12 +5,18 @@ extern crate ivyrust;
 use std::error::Error;
 use std::{thread, time};
 
+// reference AC_ID
 const AC_ID: i32 = 69;
 
+// Simple callback for all 
+fn simple_callback(data: Vec<String>) {
+	println!("Got a message!");
+	println!("Data={:?}",data);
+}
 
-fn test(n: Vec<String>) {
-	println!("TEST!");
-	println!("Data={:?}",n);
+fn specific_callback(data: Vec<String>) {
+	println!("Got DL_SETTINGS message!");
+	println!("Data={:?}",data);
 }
 
 
@@ -25,10 +31,8 @@ fn thread2() -> Result<(), Box<Error>> {
 fn main() {
 	ivyrust::ivy_init(String::from("RUST_IVY"),String::from("RUST_IVY Ready"));
 	ivyrust::ivy_start(None);
-	let p1 = ivyrust::ivy_bind_msg(test, String::from("^(\\S*) DL_SETTING (\\S*) (\\S*) (\\S*)"));
-	
-	let ptr = ivyrust::ivy_bind_msg(test, String::from("(.*)"));
-	//ivyrust::ivy_unbind_msg(&ptr);
+	let p1 = ivyrust::ivy_bind_msg(specific_callback, String::from("^(\\S*) DL_SETTING (\\S*)"));
+	let p2 = ivyrust::ivy_bind_msg(simple_callback, String::from("(.*)"));
 	
 	let t1 = thread::spawn(move || {
 		if let Err(e) =  ivyrust::ivy_main_loop() {
@@ -47,12 +51,10 @@ fn main() {
 		}
 	});
 	 
-	 
-
     println!("It works");
     
-    ivyrust::ivy_unbind_msg(ptr);
-    ivyrust::ivy_change_msg(p1, String::from("^(\\S*) DL_SETTING (\\S*)"));
+    ivyrust::ivy_unbind_msg(p2);
+    ivyrust::ivy_change_msg(p1, String::from("^(\\S*) DL_SETTING (\\S*) (\\S*) (\\S*)"));
     
     t1.join().expect("Error waiting for t1 to finish");
     t2.join().expect("Error waiting for t2 to finish");

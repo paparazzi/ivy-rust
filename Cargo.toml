@@ -4,3 +4,7 @@ version = "0.1.0"
 authors = ["Michal Podhradsky <mpodhradsky@galois.com>"]
 
 [dependencies]
+
+[[bin]]
+name = "main"
+doc = false
