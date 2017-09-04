@@ -2,6 +2,14 @@
 name = "ivyrust"
 version = "0.1.0"
 authors = ["Michal Podhradsky <mpodhradsky@galois.com>"]
+description = "Rust bindings for Ivy messaging bus"
+license = "GPL-3.0"
+documentation = "https://github.com/paparazzi/ivy-rust/README.md"
+homepage = "https://github.com/paparazzi/ivy-rust"
+repository = "https://github.com/paparazzi/ivy-rust"
+keywords = ["UAV", "ivy-bus","paparazzi","networking"]
+categories = ["API bindings", "Network programming","Parsing"]
+
 
 [dependencies]
 
