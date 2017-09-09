@@ -13,6 +13,3 @@ categories = ["api-bindings", "network-programming","parsing"]
 
 [dependencies]
 
-[[bin]]
-name = "main"
-doc = false
