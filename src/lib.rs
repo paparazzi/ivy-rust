@@ -38,7 +38,7 @@ pub struct IvyMessage {
 
 #[allow(dead_code)]
 impl IvyMessage {
-	fn new() -> IvyMessage {
+	pub fn new() -> IvyMessage {
 		IvyMessage {
 			regexpr: String::new(),
 			data: vec![],
@@ -48,13 +48,13 @@ impl IvyMessage {
 
     /// Simple callback
     #[allow(dead_code)]
-    fn callback(&mut self, data: Vec<String>) {
+    pub fn callback(&mut self, data: Vec<String>) {
         // append the vector with new data
         self.data.push(data);
     }
 
     /// Unbind message
-    fn ivy_unbind_msg(&mut self) -> bool {
+    pub fn ivy_unbind_msg(&mut self) -> bool {
     	let flag;
     	match self.msg_ptr {
     		Some(ref ptr) => {
