@@ -102,7 +102,7 @@ impl IvyMessage {
 
 
 	/// Bind ivy message to a simple callback with given regexpr
-    fn ivy_bind_msg<F>(&mut self, cb: F, regexpr: String) -> bool
+    pub fn ivy_bind_msg<F>(&mut self, cb: F, regexpr: String) -> bool
     where
         F: Fn(&mut IvyMessage, Vec<String>),
     {
