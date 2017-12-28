@@ -1,5 +1,4 @@
 #![feature(libc)]
-
 extern crate libc;
 
 use self::libc::{c_void, c_char};
@@ -7,19 +6,6 @@ use std::ffi::{CString, CStr};
 use std::ptr;
 use std::error::Error;
 use std::mem;
-
-
-/// Minimal struct representation compatible with Ivy library
-#[repr(C, packed)]
-pub struct IvyClientPtr {
-    next: *mut IvyClientPtr,
-}
-
-/// Minimal struct representation compatible with Ivy library
-#[repr(C, packed)]
-pub struct MsgRcvPtr {
-    next: *mut MsgRcvPtr,
-}
 
 /// Intended for future use
 pub enum IvyApplicationEvent {
@@ -30,26 +16,163 @@ pub enum IvyApplicationEvent {
     IvyApplicationFifoFull,
 }
 
+/// Minimal struct representation compatible with Ivy library
+#[repr(C, packed)]
+pub struct IvyClientPtr {
+    next: *mut IvyClientPtr,
+}
+
+/// Minimal struct representation compatible with Ivy library
+#[derive(Clone)]
+#[repr(C, packed)]
+pub struct MsgRcvPtr {
+    next: *mut MsgRcvPtr,
+}
+
+/// Generic struct holding callback data
+pub struct IvyMessage {
+    regexpr: String,
+    data: Vec<Vec<String>>, //TODO: figure out mutexes?
+    msg_ptr: Option<MsgRcvPtr>,
+}
+
+#[allow(dead_code)]
+impl IvyMessage {
+	fn new() -> IvyMessage {
+		IvyMessage {
+			regexpr: String::new(),
+			data: vec![],
+			msg_ptr: None,
+		}
+	}
+
+    /// Simple callback
+    #[allow(dead_code)]
+    fn callback(&mut self, data: Vec<String>) {
+        // append the vector with new data
+        self.data.push(data);
+    }
+
+    /// Unbind message
+    fn ivy_unbind_msg(&mut self) -> bool {
+    	let flag;
+    	match self.msg_ptr {
+    		Some(ref ptr) => {
+	    			let p = ptr.clone();
+    			    unsafe {
+				        IvyUnbindMsg(p);
+				    }
+    			    flag = true;
+    		}
+    		None => {
+    			flag = false;
+    		}
+    	};
+    	if flag {
+    		self.msg_ptr = None;
+    	}
+    	flag
+    }
+
+	/// Change regular expression of an existing message
+	pub fn ivy_change_msg(&mut self, regexpr: String) -> bool {
+		self.regexpr = regexpr.clone();
+	    let regexpr = CString::new(regexpr).unwrap();
+	    
+	    let flag;
+	    let msg_ptr;
+	    match self.msg_ptr {
+	    	Some(ref mut ptr) => {
+	    		let p = ptr.clone();
+		    	unsafe {
+		    		msg_ptr = Some(IvyChangeMsg(p,regexpr.as_ptr()));
+		    	};
+		    	flag = true;
+	    	}
+	    	None => {
+	    		msg_ptr = None;
+	    		flag = false;
+	    	},
+	    };
+	    if flag {
+    		self.msg_ptr = msg_ptr;
+    	}
+    	flag
+	}
+
+
+	/// Bind ivy message to a simple callback with given regexpr
+    fn ivy_bind_msg<F>(&mut self, cb: F, regexpr: String) -> bool
+    where
+        F: Fn(&mut IvyMessage, Vec<String>),
+    {
+    	self.regexpr = regexpr.clone();
+        let regexpr = CString::new(regexpr).unwrap();
+        
+        let msg_ptr;
+        {
+	        let boxed_cb: Box<(Box<Fn(&mut IvyMessage, Vec<String>)>, &mut IvyMessage)> =
+	            Box::new((Box::new(cb), self));
+	        msg_ptr = unsafe {
+			            Some(IvyBindMsg(
+			                apply_closure,
+			                Box::into_raw(boxed_cb) as *const c_void,
+			                regexpr.as_ptr(),
+			            ))
+			        };
+        }
+        self.msg_ptr = msg_ptr;
+        match self.msg_ptr {
+        	Some(_) => true,
+        	None => false,
+        }
+    }
+}
+
+#[allow(dead_code)]
+extern "C" fn apply_closure(_app: IvyClientPtr,
+                            user_data: *mut c_void,
+                            argc: i32,
+                            argv: *const *const c_char) {
+    // parse argv into String vector for easier management
+    let mut v: Vec<String> = vec![];
+    for i in 0..argc as isize {
+        unsafe {
+            let ptr = argv.offset(i);
+            v.push(String::from(CStr::from_ptr(*ptr).to_str().unwrap()));
+        }
+    }
+    
+    let payload: &mut (Box<Fn(&mut IvyMessage, Vec<String>) -> ()>, &mut IvyMessage) =
+        unsafe { mem::transmute(user_data) };
+    
+    payload.0(&mut payload.1, v);
+}
+
+#[allow(dead_code)]
 #[link(name = "ivy")]
 extern "C" {
-    fn IvyInit(app_name: *const c_char,
-               ready_msg: *const c_char,
-               callback: *const c_void,
-               app_data: *const c_void,
-               die_callback: *const c_void,
-               die_data: *const c_void);
+    fn IvyInit(
+        app_name: *const c_char,
+        ready_msg: *const c_char,
+        callback: *const c_void,
+        app_data: *const c_void,
+        die_callback: *const c_void,
+        die_data: *const c_void,
+    );
     fn IvyStart(bus_addr: *const c_char);
     fn IvyStop();
     fn IvyMainLoop();
     fn IvySendMsg(fmt_message: *const c_char, ...);
-    fn IvyBindMsg(callback: extern "C" fn(app: IvyClientPtr,
-                                          user_data: *mut c_void,
-                                          argc: i32,
-                                          argv: *const *const c_char),
-                  user_data: *const c_void,
-                  regexpr: *const c_char,
-                  ...)
-                  -> MsgRcvPtr;
+    fn IvyBindMsg(
+        callback: extern "C" fn(app: IvyClientPtr,
+                                user_data: *mut c_void,
+                                argc: i32,
+                                argv: *const *const c_char),
+        user_data: *const c_void,
+        regexpr: *const c_char,
+        ...
+    ) -> MsgRcvPtr;
     fn IvyUnbindMsg(id: MsgRcvPtr);
     fn IvyChangeMsg(msg: MsgRcvPtr, fmt_regex: *const c_char, ...) -> MsgRcvPtr;
 }
@@ -65,15 +188,16 @@ pub fn ivy_init(app_name: String, ready_msg: String) {
     let app_name = CString::new(app_name).unwrap();
     let ready_msg = CString::new(ready_msg).unwrap();
     unsafe {
-        IvyInit(app_name.as_ptr(),
-                ready_msg.as_ptr(),
-                ptr::null(),
-                ptr::null(),
-                ptr::null(),
-                ptr::null());
+        IvyInit(
+            app_name.as_ptr(),
+            ready_msg.as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+        );
     }
 }
-
 
 /// Start Ivy bus
 ///
@@ -122,81 +246,6 @@ pub fn ivy_send_msg(msg: String) {
 }
 
 
-
-/// Bind a callback for a particular message
-///
-/// `regexpr` defines which message should be bound, for
-/// example "\^(\\S*) DL_SETTING (\\S*) (\\S*) (\\S*)" will
-/// and `cb` is a function callback in form of `Fn(Vec<String>)`
-///
-pub fn ivy_bind_msg<F>(cb: F, regexpr: String) -> MsgRcvPtr
-    where F: Fn(Vec<String>)
-{
-    let regexpr = CString::new(regexpr).unwrap();
-
-    // For the reasons articulated above, we create a pointer to a
-    // (fat) pointer to the closure
-    let boxed_cb: Box<Box<Fn(Vec<String>)>> = Box::new(Box::new(cb));
-    // and then we call the C function with our 'apply_closure'
-    // function as well as the actual closure:
-    unsafe {
-        IvyBindMsg(apply_closure,
-                   Box::into_raw(boxed_cb) as *const c_void,
-                   regexpr.as_ptr())
-    }
-}
-
-// This function is what we're actually going to provide as the
-// function pointer to call_callback: it takes a number and a void
-// pointer...
-extern "C" fn apply_closure(_app: IvyClientPtr,
-                            user_data: *mut c_void,
-                            argc: i32,
-                            argv: *const *const c_char) {
-    // parse argv into String vector for easier management
-    let mut v: Vec<String> = vec![];
-    for i in 0..argc as isize {
-        unsafe {
-            let ptr = argv.offset(i);
-            v.push(String::from(CStr::from_ptr(*ptr).to_str().unwrap()));
-        }
-    }
-    // and here it interprets the void pointer as a reference to a
-    // pointer to a function. The two layers are doing something
-    // important: pointers to traits in Rust are "fat pointers",
-    // i.e. they are actually a function-pointer/data-pointer pair. So
-    // what we're doing is getting a pointer to those two pointer
-    // pairs, and then using those to call the code with the
-    // appropriate data.
-    let closure: &mut Box<Fn(Vec<String>) -> ()> = unsafe { mem::transmute(user_data) };
-    // And then we can just call the closure!
-    closure(v);
-}
-
-
-
-
-
-
-/// Unbind an existing message
-pub fn ivy_unbind_msg(id: MsgRcvPtr) {
-    unsafe {
-        IvyUnbindMsg(id);
-    }
-}
-
-
-/// Change regular expression of an existing message
-pub fn ivy_change_msg(id: MsgRcvPtr, regexpr: String) -> MsgRcvPtr {
-    let regexpr = CString::new(regexpr).unwrap();
-    unsafe { IvyChangeMsg(id, regexpr.as_ptr()) }
-}
-
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     extern crate libc;
@@ -209,55 +258,44 @@ mod tests {
     // reference AC_ID
     const AC_ID: i32 = 69;
 
-    // Simple callback for all
-    fn simple_callback(data: Vec<String>) {
-        println!("Got a message!");
-        println!("Data={:?}", data);
-    }
-
-    fn specific_callback(data: Vec<String>) {
-        println!("Got DL_SETTINGS message!");
-        println!("Data={:?}", data);
-    }
-
-
     fn thread2() -> Result<(), Box<Error>> {
-        loop {
-            let wind_msg = format!("{} NPS_WIND {} {} {}", AC_ID, 1.0, 2.0, 3.0);
-            ivy_send_msg(wind_msg);
-            thread::sleep(time::Duration::from_millis(10000));
-        }
+        let wind_msg = format!("{} NPS_WIND {} {} {}", AC_ID, 1.0, 2.0, 3.0);
+        ivy_send_msg(wind_msg);
+        thread::sleep(time::Duration::from_millis(10000));
+        Ok(())
     }
 
     #[test]
     fn main_test() {
         ivy_init(String::from("RUST_IVY"), String::from("RUST_IVY Ready"));
         ivy_start(None);
-        let p1 = ivy_bind_msg(specific_callback, String::from("^(\\S*) DL_SETTING (\\S*)"));
-        let p2 = ivy_bind_msg(simple_callback, String::from("(.*)"));
+        
+        let mut cb1 = IvyMessage::new();
+        let mut cb2 = IvyMessage::new();
 
-        let t1 = thread::spawn(move || if let Err(e) = ivy_main_loop() {
-                                   println!("Error in Ivy main loop: {}", e);
-                               } else {
-                                   println!("ivy main loop finished finished");
-                               });
+        assert_eq!(true,cb1.ivy_bind_msg(IvyMessage::callback, String::from("^(\\S*) DL_SETTING (\\S*)")));
+        assert_eq!(true,cb2.ivy_bind_msg(IvyMessage::callback, String::from("(.*)")));
 
+        let _t1 = thread::spawn(move || if let Err(e) = ivy_main_loop() {
+            println!("Error in Ivy main loop: {}", e);
+        } else {
+            println!("ivy main loop finished finished");
+        });
 
         let t2 = thread::spawn(move || if let Err(e) = thread2() {
-                                   println!("Error in thread2: {}", e);
-                               } else {
-                                   println!("thread2 finished finished");
-                               });
+            println!("Error in thread2: {}", e);
+        } else {
+            println!("thread2 finished finished");
+        });
 
-        println!("It works");
+		// this will unbind the callback from the message
+        assert_eq!(true,cb2.ivy_unbind_msg());
+        
+        // this will allow us to change the already bound message
+        assert_eq!(true,cb1.ivy_change_msg(String::from("^(\\S*) DL_SETTING (\\S*) (\\S*) (\\S*)")));
 
-        ivy_unbind_msg(p2);
-        ivy_change_msg(p1, String::from("^(\\S*) DL_SETTING (\\S*) (\\S*) (\\S*)"));
-
-        t1.join().expect("Error waiting for t1 to finish");
         t2.join().expect("Error waiting for t2 to finish");
 
         ivy_stop();
     }
-
 }
