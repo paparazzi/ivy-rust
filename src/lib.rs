@@ -169,7 +169,7 @@ extern "C" {
     fn IvyStop();
     fn IvyMainLoop();
     fn IvySendMsg(fmt_message: *const c_char, ...);
-    fn IvyBindMsg(
+    pub fn IvyBindMsg(
         callback: extern "C" fn(app: IvyClientPtr,
                                 user_data: *mut c_void,
                                 argc: i32,
