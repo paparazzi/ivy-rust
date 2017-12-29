@@ -6,6 +6,7 @@ use std::ffi::{CString, CStr};
 use std::ptr;
 use std::error::Error;
 use std::mem;
+use std::sync::Mutex;
 
 /// Intended for future use
 pub enum IvyApplicationEvent {
@@ -32,7 +33,7 @@ pub struct MsgRcvPtr {
 /// Generic struct holding callback data
 pub struct IvyMessage {
     regexpr: String,
-    data: Vec<Vec<String>>, //TODO: figure out mutexes?
+    data: Mutex<Vec<Vec<String>>>,
     msg_ptr: Option<MsgRcvPtr>,
 }
 
@@ -41,7 +42,7 @@ impl IvyMessage {
 	pub fn new() -> IvyMessage {
 		IvyMessage {
 			regexpr: String::new(),
-			data: vec![],
+			data: Mutex::new(vec![]),
 			msg_ptr: None,
 		}
 	}
@@ -50,7 +51,12 @@ impl IvyMessage {
     #[allow(dead_code)]
     pub fn callback(&mut self, data: Vec<String>) {
         // append the vector with new data
-        self.data.push(data);
+        let mut lock = self.data.lock();
+	    if let Ok(ref mut mutex) = lock {
+			mutex.push(data);
+	    } else {
+	        println!("Ivy callback: mutex lock failed");
+	    }
     }
 
     /// Unbind message
@@ -164,7 +170,7 @@ extern "C" {
     fn IvyStop();
     fn IvyMainLoop();
     fn IvySendMsg(fmt_message: *const c_char, ...);
-    fn IvyBindMsg(
+    pub fn IvyBindMsg(
         callback: extern "C" fn(app: IvyClientPtr,
                                 user_data: *mut c_void,
                                 argc: i32,
