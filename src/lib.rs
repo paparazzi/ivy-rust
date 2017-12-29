@@ -31,8 +31,8 @@ pub struct MsgRcvPtr {
 
 /// Generic struct holding callback data
 pub struct IvyMessage {
-    regexpr: String,
-    data: Mutex<Vec<Vec<String>>>,
+    pub regexpr: String,
+    pub data: Mutex<Vec<Vec<String>>>,
     msg_ptr: Option<MsgRcvPtr>,
 }
 
