@@ -9,3 +9,6 @@ homepage = "https://github.com/paparazzi/ivy-rust"
 repository = "https://github.com/paparazzi/ivy-rust"
 keywords = ["UAV", "ivy-bus","paparazzi","networking"]
 categories = ["api-bindings", "network-programming","parsing"]
+
+[dependencies]
+libc = "0.2"

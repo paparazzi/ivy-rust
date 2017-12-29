@@ -1,7 +1,6 @@
-#![feature(libc)]
 extern crate libc;
 
-use self::libc::{c_void, c_char};
+use libc::{c_void, c_char};
 use std::ffi::{CString, CStr};
 use std::ptr;
 use std::error::Error;
